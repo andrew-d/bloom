@@ -21,6 +21,9 @@ func TestBloomFilter(t *testing.T) {
 	if !bf.Contains("banana") {
 		t.Error("'banana' should be in the filter")
 	}
+
+	// TODO(andrew-d): over enough test runs, we could get the occasional
+	// false positive; we should just retry the test in that case.
 	if bf.Contains("grape") {
 		t.Error("'grape' should not be in the filter")
 	}
