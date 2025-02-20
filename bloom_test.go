@@ -3,6 +3,7 @@ package bloom
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -27,6 +28,31 @@ func TestBloomFilter(t *testing.T) {
 	if bf.Contains("grape") {
 		t.Error("'grape' should not be in the filter")
 	}
+}
+
+func TestBloomFilter_ConcurrentContains(t *testing.T) {
+	bf := NewBloomFilter[string](1000, 0.01)
+
+	for _, fruit := range []string{"apple", "banana", "orange"} {
+		bf.Add(fruit)
+	}
+
+	// Test presence concurrently
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			const fruit = "banana"
+			for j := 0; j < 100; j++ {
+				if !bf.Contains(fruit) {
+					t.Errorf("'%s' should be in the filter", fruit)
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestBloomFilter_EstimatedFalsePositiveRate(t *testing.T) {

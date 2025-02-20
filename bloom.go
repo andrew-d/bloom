@@ -11,13 +11,10 @@ import (
 // whether an element is a member of a set. Once a Filter has been created,
 // adding a new item to the set does not require any additional memory
 // allocation.
-//
-// None of the methods on this type are safe for concurrent use.
 type Filter[T comparable] struct {
 	bits    []uint64
 	m       uint           // size of bit array
 	seeds   []maphash.Seed // k different seeds for k hash functions
-	hasher  maphash.Hash
 	entries uint
 }
 
@@ -37,13 +34,14 @@ func NewBloomFilter[T comparable](expectedItems uint, falsePositiveRate float64)
 		bits:    make([]uint64, (m+63)/64), // Round up to nearest multiple of 64
 		m:       m,
 		seeds:   seeds,
-		hasher:  maphash.Hash{},
 		entries: 0,
 	}
 	return bf
 }
 
 // Add inserts an item into the Bloom filter.
+//
+// This method is not safe for concurrent use.
 func (bf *Filter[T]) Add(item T) {
 	bf.entries++
 
@@ -59,6 +57,9 @@ func (bf *Filter[T]) Add(item T) {
 
 // Contains tests whether an item might be in the set.
 // False positives are possible, but false negatives are not.
+//
+// This method can be called concurrently with other calls to itself or
+// [Filter.EstimatedFalsePositiveRate], but not [Filter.Add].
 func (bf *Filter[T]) Contains(item T) bool {
 	// Check all k positions
 	for _, seed := range bf.seeds {
@@ -75,14 +76,17 @@ func (bf *Filter[T]) Contains(item T) bool {
 
 // hashItem generates a hash value using the provided seed
 func (bf *Filter[T]) hashItem(item T, seed maphash.Seed) uint64 {
-	bf.hasher.Reset()
-	bf.hasher.SetSeed(seed)
-	maphash.WriteComparable(&bf.hasher, item)
-	return bf.hasher.Sum64()
+	var hasher maphash.Hash
+	hasher.SetSeed(seed)
+	maphash.WriteComparable(&hasher, item)
+	return hasher.Sum64()
 }
 
 // EstimatedFalsePositiveRate returns the current estimated false positive rate
 // based on the number of items added.
+//
+// This method can be called concurrently with other calls to [Filter.Contains]
+// or itself.
 func (bf *Filter[T]) EstimatedFalsePositiveRate() float64 {
 	if bf.entries == 0 {
 		return 0
